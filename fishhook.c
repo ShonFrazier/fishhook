@@ -21,15 +21,15 @@
 // OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#import "fishhook.h"
+#include "fishhook.h"
 
-#import <dlfcn.h>
-#import <stdlib.h>
-#import <string.h>
-#import <sys/types.h>
-#import <mach-o/dyld.h>
-#import <mach-o/loader.h>
-#import <mach-o/nlist.h>
+#include <dlfcn.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#include <mach-o/nlist.h>
 
 #ifdef __LP64__
 typedef struct mach_header_64 mach_header_t;
@@ -60,11 +60,11 @@ static struct rebindings_entry *_rebindings_head;
 static int prepend_rebindings(struct rebindings_entry **rebindings_head,
                               struct rebinding rebindings[],
                               size_t nel) {
-  struct rebindings_entry *new_entry = malloc(sizeof(struct rebindings_entry));
+  struct rebindings_entry *new_entry = (struct rebindings_entry *) malloc(sizeof(struct rebindings_entry));
   if (!new_entry) {
     return -1;
   }
-  new_entry->rebindings = malloc(sizeof(struct rebinding) * nel);
+  new_entry->rebindings = (struct rebinding *) malloc(sizeof(struct rebinding) * nel);
   if (!new_entry->rebindings) {
     free(new_entry);
     return -1;
@@ -92,13 +92,12 @@ static void perform_rebinding_with_section(struct rebindings_entry *rebindings,
     }
     uint32_t strtab_offset = symtab[symtab_index].n_un.n_strx;
     char *symbol_name = strtab + strtab_offset;
-    if (strnlen(symbol_name, 2) < 2) {
-      continue;
-    }
+    bool symbol_name_longer_than_1 = symbol_name[0] && symbol_name[1];
     struct rebindings_entry *cur = rebindings;
     while (cur) {
       for (uint j = 0; j < cur->rebindings_nel; j++) {
-        if (strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
+        if (symbol_name_longer_than_1 &&
+            strcmp(&symbol_name[1], cur->rebindings[j].name) == 0) {
           if (cur->rebindings[j].replaced != NULL &&
               indirect_symbol_bindings[i] != cur->rebindings[j].replacement) {
             *(cur->rebindings[j].replaced) = indirect_symbol_bindings[i];
@@ -186,7 +185,10 @@ int rebind_symbols_image(void *header,
                          size_t rebindings_nel) {
     struct rebindings_entry *rebindings_head = NULL;
     int retval = prepend_rebindings(&rebindings_head, rebindings, rebindings_nel);
-    rebind_symbols_for_image(rebindings_head, header, slide);
+    rebind_symbols_for_image(rebindings_head, (const struct mach_header *) header, slide);
+    if (rebindings_head) {
+      free(rebindings_head->rebindings);
+    }
     free(rebindings_head);
     return retval;
 }
